@@ -99,8 +99,8 @@ TogoMCP exposes tools for querying the following (via SPARQL or REST APIs):
 | Chemistry | ChEMBL, PubChem, Rhea |
 | Structure | PDB |
 | Pathways | Reactome |
-| Ontologies | MeSH, OLS |
-| General RDF | All RDF Portal databases via SPARQL |
+| Ontologies | MeSH, GO, ChEBI |
+| General RDF | RDF Portal databases via SPARQL |
 
 ---
 
@@ -112,6 +112,37 @@ Once connected, you can ask your AI assistant things like:
 - *"Run a SPARQL query on the ChEMBL database to find compounds targeting EGFR."*
 - *"Search PubMed for recent papers on CRISPR base editing."*
 - *"What pathways involve the TP53 gene in Reactome?"*
+
+---
+
+## Directory Structure
+
+```
+togo-mcp/
+├── togo_mcp/               # Main Python package
+│   ├── server.py           # MCP server entry point
+│   ├── main.py             # Core logic and tool registration
+│   ├── admin.py            # Admin-mode tools (MIE generation)
+│   ├── api_tools.py        # REST API integrations (ChEMBL, PDB, Reactome, etc.)
+│   ├── ncbi_tools.py       # NCBI E-utilities tools
+│   ├── rdf_portal.py       # RDF Portal / SPARQL tools
+│   └── togoid.py           # TogoID identifier conversion tools
+├── mie/                    # Machine-Interpretable Entity (MIE) files (YAML)
+│   ├── uniprot.yaml        # (one per supported database)
+│   └── ...
+├── sparql-examples/        # Example SPARQL queries per database
+├── shex/                   # ShEx schemas for RDF validation
+├── rdf-config/             # RDF Portal configuration files
+├── docs/                   # Developer documentation
+│   ├── MIE_file_specs.md   # Spec for writing MIE files
+│   └── ...
+├── benchmark/              # Benchmarking scripts and results
+├── scripts/                # Utility/maintenance scripts
+├── resources/              # Static resources
+├── Dockerfile              # Docker build configuration
+├── pyproject.toml          # Python project metadata and entry points
+└── uv.lock                 # Locked dependency versions (uv)
+```
 
 ---
 
