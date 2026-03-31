@@ -3,19 +3,24 @@ from fastmcp.server.dependencies import get_http_request
 import csv
 from typing import Dict
 import os
+from pathlib import Path
 import httpx
 import logging
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse,HTMLResponse
+from starlette.responses import PlainTextResponse, HTMLResponse
 
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
+
 def toolcall_log(funname: str) -> None:
     """
     toolcall_log
-    
+
     :param funname: The name of the tool being called.
     :type funname: str
     """
@@ -29,17 +34,19 @@ def toolcall_log(funname: str) -> None:
     return None
 
 
-# The MIE files are used to define the shape expressions for SPARQL queries. 
-CWD = os.getenv("TOGOMCP_DIR", ".")
+# The MIE files are used to define the shape expressions for SPARQL queries.
+# When installed as a package, resolve paths relative to the bundled data directory.
+# The TOGOMCP_DIR env var can override this for development or custom deployments.
+_PACKAGE_DATA_DIR = str(Path(__file__).parent / "data")
+CWD = os.getenv("TOGOMCP_DIR", _PACKAGE_DATA_DIR)
 MIE_DIR = CWD + "/mie"
-MIE_PROMPT= CWD + "/resources/MIE_prompt.md"
-TOGOMCP_USAGE_GUIDE= CWD + "/resources/togomcp_usage_guide_v2.md"
-SPARQL_EXAMPLES= CWD + "/sparql-examples"
-RDF_CONFIG_TEMPLATE= CWD + "/rdf-config/template.yaml"
+MIE_PROMPT = CWD + "/resources/MIE_prompt.md"
+TOGOMCP_USAGE_GUIDE = CWD + "/resources/togomcp_usage_guide_v2.md"
+SPARQL_EXAMPLES = CWD + "/sparql-examples"
+RDF_CONFIG_TEMPLATE = CWD + "/rdf-config/template.yaml"
 ENDPOINTS_CSV = CWD + "/resources/endpoints.csv"
 INDEX_HTML = CWD + "/docs/togomcp-intro.html"
 KW_SEARCH_INSTRUCTIONS = CWD + "/kw_search"
-
 
 
 def load_sparql_endpoints(path: str) -> Dict[str, Dict[str, str]]:
@@ -51,18 +58,19 @@ def load_sparql_endpoints(path: str) -> Dict[str, Dict[str, str]]:
     - keyword_search: The keyword search API to use
     """
     endpoints = {}
-    with open(path, mode='r', encoding='utf-8') as csvfile:
+    with open(path, mode="r", encoding="utf-8") as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header
         for row in reader:
             db_name, endpoint_url, endpoint_name, keyword_search_api = row
-            key = db_name.lower().replace(' ', '_').replace('-', '')
+            key = db_name.lower().replace(" ", "_").replace("-", "")
             endpoints[key] = {
                 "url": endpoint_url,
                 "endpoint_name": endpoint_name,
-                "keyword_search": keyword_search_api
+                "keyword_search": keyword_search_api,
             }
     return endpoints
+
 
 # The SPARQL endpoints for various RDF databases, loaded from a CSV file.
 SPARQL_ENDPOINT = load_sparql_endpoints(ENDPOINTS_CSV)
@@ -81,11 +89,8 @@ for dbname, info in SPARQL_ENDPOINT.items():
 ENDPOINT_NAMES = list(ENDPOINT_NAME_TO_URL.keys())
 SPARQL_ENDPOINT_KEYS = list(SPARQL_ENDPOINT.keys())
 
-def resolve_endpoint_url(
-    dbname: str,
-    endpoint_name: str,
-    endpoint_url: str
-) -> str:
+
+def resolve_endpoint_url(dbname: str, endpoint_name: str, endpoint_url: str) -> str:
     """Resolve the SPARQL endpoint URL from various input options.
 
     Priority: endpoint_url > endpoint_name > dbname
@@ -124,10 +129,7 @@ def resolve_endpoint_url(
 
 # Making this a @mcp.tool() becomes an error, so we keep it as a function.
 async def execute_sparql(
-    sparql_query: str,
-    dbname: str = "",
-    endpoint_name: str = "",
-    endpoint_url: str = ""
+    sparql_query: str, dbname: str = "", endpoint_name: str = "", endpoint_url: str = ""
 ) -> str:
     """Execute a SPARQL query on RDF Portal.
 
@@ -153,15 +155,18 @@ async def execute_sparql(
     response.raise_for_status()
     return response.text
 
+
 # The Primary MCP server
 mcp = FastMCP("TogoMCP: RDF Portal MCP Server")
+
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> PlainTextResponse:
     return PlainTextResponse("OK")
 
+
 @mcp.custom_route("/", methods=["GET"])
 async def index(request: Request) -> HTMLResponse:
-    with open(INDEX_HTML, 'r') as f:
+    with open(INDEX_HTML, "r") as f:
         html_content = f.read()
     return HTMLResponse(html_content)
