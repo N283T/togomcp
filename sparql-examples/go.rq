@@ -1,8 +1,0 @@
-# Endpoint: https://integbio.jp/rdf/sparql
-# Description: SPARQL description.
-
-
-SELECT ?Class
-WHERE {
-}
-LIMIT 100
