@@ -48,6 +48,8 @@ togo-mcp-admin = "togo_mcp.main:run_admin"
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-asyncio",
+    "respx",
     "ruff",
 ]
 
