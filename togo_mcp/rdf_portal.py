@@ -20,10 +20,6 @@ from .server import (
 
 logger = logging.getLogger(__name__)
 
-# @mcp.resource("resource://boilerplate")
-# def boilerplate() -> str:
-#     return "Hello! I don't know why this is here. But, the server doesn't work without it."
-
 
 @mcp.tool(name="TogoMCP_Usage_Guide")
 def togomcp_usage_guide() -> str:
@@ -190,13 +186,14 @@ async def get_MIE_file(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTI
         return f"Error: The MIE file for '{dbname}' was not found."
     try:
         with open(mie_file, encoding="utf-8") as file:
-            content = yaml.safe_load(file)
-            yaml_dump = yaml.dump(content, sort_keys=False)
-            response_text = f"""Content-type: application/yaml; charset=utf-8
-{yaml_dump}"""
+            content = file.read()
+            response_text = f"Content-type: application/yaml; charset=utf-8\n{content}"
             return response_text
-    except (OSError, yaml.YAMLError) as e:
+    except OSError as e:
         return f"Error reading MIE file for '{dbname}': {e}"
+
+
+_cached_databases: list[dict[str, Any]] | None = None
 
 
 @mcp.tool(name="list_databases")
@@ -249,7 +246,10 @@ def list_databases() -> list[dict[str, Any]]:
     Returns:
         A list of dictionaries, each containing schema info for a file.
     """
+    global _cached_databases
     toolcall_log("list_databases")
+    if _cached_databases is not None:
+        return _cached_databases
     resources_dir = MIE_DIR
     if not os.path.isdir(resources_dir):
         logger.error(f"Directory '{resources_dir}' not found.")
@@ -296,4 +296,5 @@ def list_databases() -> list[dict[str, Any]]:
                     "description": f"Error reading file: {e}",
                 }
             )
-    return all_schemas_info
+    _cached_databases = all_schemas_info
+    return _cached_databases
