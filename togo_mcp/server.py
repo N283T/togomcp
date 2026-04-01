@@ -1,19 +1,16 @@
-from fastmcp import FastMCP
-from fastmcp.server.dependencies import get_http_request
 import csv
-from typing import Dict
+import logging
 import os
 from pathlib import Path
-import httpx
-import logging
-from starlette.requests import Request
-from starlette.responses import PlainTextResponse, HTMLResponse
 
+import httpx
+from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_request
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, PlainTextResponse
 
 # Set up logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -43,13 +40,11 @@ MIE_DIR = CWD + "/mie"
 MIE_PROMPT = CWD + "/resources/MIE_prompt.md"
 TOGOMCP_USAGE_GUIDE = CWD + "/resources/togomcp_usage_guide_v2.md"
 SPARQL_EXAMPLES = CWD + "/sparql-examples"
-RDF_CONFIG_TEMPLATE = CWD + "/rdf-config/template.yaml"
 ENDPOINTS_CSV = CWD + "/resources/endpoints.csv"
 INDEX_HTML = CWD + "/docs/togomcp-intro.html"
-KW_SEARCH_INSTRUCTIONS = CWD + "/kw_search"
 
 
-def load_sparql_endpoints(path: str) -> Dict[str, Dict[str, str]]:
+def load_sparql_endpoints(path: str) -> dict[str, dict[str, str]]:
     """Load SPARQL endpoints from a CSV file.
 
     Returns a dictionary keyed by database name with values containing:
@@ -58,7 +53,7 @@ def load_sparql_endpoints(path: str) -> Dict[str, Dict[str, str]]:
     - keyword_search: The keyword search API to use
     """
     endpoints = {}
-    with open(path, mode="r", encoding="utf-8") as csvfile:
+    with open(path, encoding="utf-8") as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header
         for row in reader:
@@ -77,8 +72,8 @@ SPARQL_ENDPOINT = load_sparql_endpoints(ENDPOINTS_CSV)
 DBNAME_DESCRIPTION = f"Database name: One of {','.join(SPARQL_ENDPOINT.keys())}"
 
 # Build reverse lookups for endpoint_name -> url and list of databases per endpoint
-ENDPOINT_NAME_TO_URL: Dict[str, str] = {}
-ENDPOINT_NAME_TO_DATABASES: Dict[str, list] = {}
+ENDPOINT_NAME_TO_URL: dict[str, str] = {}
+ENDPOINT_NAME_TO_DATABASES: dict[str, list] = {}
 for dbname, info in SPARQL_ENDPOINT.items():
     ep_name = info["endpoint_name"]
     ENDPOINT_NAME_TO_URL[ep_name] = info["url"]
@@ -122,9 +117,7 @@ def resolve_endpoint_url(dbname: str, endpoint_name: str, endpoint_url: str) -> 
                 f"Valid databases are: {', '.join(SPARQL_ENDPOINT_KEYS)}"
             )
         return SPARQL_ENDPOINT[dbname]["url"]
-    raise ValueError(
-        "At least one of dbname, endpoint_name, or endpoint_url must be provided"
-    )
+    raise ValueError("At least one of dbname, endpoint_name, or endpoint_url must be provided")
 
 
 # Making this a @mcp.tool() becomes an error, so we keep it as a function.
@@ -167,6 +160,6 @@ async def health_check(request: Request) -> PlainTextResponse:
 
 @mcp.custom_route("/", methods=["GET"])
 async def index(request: Request) -> HTMLResponse:
-    with open(INDEX_HTML, "r") as f:
+    with open(INDEX_HTML) as f:
         html_content = f.read()
     return HTMLResponse(html_content)

@@ -1,5 +1,7 @@
-from .server import *
 import httpx
+from fastmcp import FastMCP
+
+from .server import toolcall_log
 
 _client = httpx.AsyncClient(base_url="https://api.togoid.dbcls.jp")
 togoid_mcp = FastMCP("TogoID API server")
@@ -8,6 +10,7 @@ togoid_mcp = FastMCP("TogoID API server")
 # ============================================================================
 # DISCOVERY TOOLS — Use these EARLY in multi-database workflows
 # ============================================================================
+
 
 @togoid_mcp.tool()
 async def getAllRelation() -> dict:
@@ -152,6 +155,7 @@ async def getDescription() -> dict:
 # CONVERSION TOOLS — Use these AFTER planning with discovery tools above
 # ============================================================================
 
+
 @togoid_mcp.tool()
 async def convertId(
     ids: str,
@@ -204,7 +208,7 @@ async def convertId(
         "format": "json",
         "limit": limit,
         "offset": offset,
-        "noheader": "0"
+        "noheader": "0",
     }
 
     response = await _client.get("/convert", params=params)
@@ -213,11 +217,7 @@ async def convertId(
 
 
 @togoid_mcp.tool()
-async def countId(
-    source: str,
-    target: str,
-    ids: str
-) -> dict:
+async def countId(source: str, target: str, ids: str) -> dict:
     """Check how many of your IDs can be converted before doing bulk conversion.
 
     A lightweight pre-check: tells you how many source IDs have mappings in the
@@ -242,9 +242,6 @@ async def countId(
         # (3 genes map to 5 UniProt entries — some genes have multiple proteins)
     """
     toolcall_log("countId")
-    response = await _client.get(
-        f"/count/{source}-{target}",
-        params={"ids": ids}
-    )
+    response = await _client.get(f"/count/{source}-{target}", params={"ids": ids})
     response.raise_for_status()
     return response.json()
