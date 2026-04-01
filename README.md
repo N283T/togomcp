@@ -126,18 +126,15 @@ togomcp/
 │   ├── api_tools.py        # REST API integrations (ChEMBL, PDB, Reactome, etc.)
 │   ├── ncbi_tools.py       # NCBI E-utilities tools
 │   ├── rdf_portal.py       # RDF Portal / SPARQL tools
-│   └── togoid.py           # TogoID identifier conversion tools
-├── mie/                    # Metadata-Interoperability-Exchange (MIE) files (YAML)
-│   ├── uniprot.yaml        # (one per supported database)
-│   └── ...
-├── sparql-examples/        # Example SPARQL queries per database
+│   ├── togoid.py           # TogoID identifier conversion tools
+│   └── data/               # Bundled data files (included in package)
+│       ├── mie/            # Metadata-Interoperability-Exchange (MIE) files (YAML)
+│       ├── sparql-examples/# Example SPARQL queries per database
+│       ├── docs/           # Developer documentation
+│       └── resources/      # Static resources (endpoints, prompts, etc.)
 ├── shex/                   # ShEx schemas for RDF validation
-├── docs/                   # Developer documentation
-│   ├── MIE_file_specs.md   # Spec for writing MIE files
-│   └── ...
 ├── benchmark/              # Benchmarking scripts and results
 ├── scripts/                # Utility/maintenance scripts
-├── resources/              # Static resources
 ├── workflows/              # Example workflow prompts
 ├── Dockerfile              # Docker build configuration
 ├── pyproject.toml          # Python project metadata and entry points

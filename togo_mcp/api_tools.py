@@ -1,10 +1,15 @@
-import httpx
-from typing import List, Dict, Annotated, Any, Optional
-from pydantic import Field
 import json
+import logging
 import re
+from typing import Annotated
 
-from .server import *
+import httpx
+from pydantic import Field
+
+from .server import mcp, toolcall_log
+
+logger = logging.getLogger(__name__)
+
 
 ######################################
 #####　Database-specific tools ########
@@ -102,7 +107,7 @@ async def search_uniprot_entity(query: str, limit: int = 20) -> str:
         "query": query,
         "fields": "accession,protein_name,organism_name",
         "format": "tsv",
-        "size": limit 
+        "size": limit,
     }
     try:
         async with httpx.AsyncClient() as client:
@@ -111,8 +116,9 @@ async def search_uniprot_entity(query: str, limit: int = 20) -> str:
         data = response.text
         return data
     except httpx.HTTPError as e:
-        print(f"Error querying UniProt: {e}")
+        logger.error(f"Error querying UniProt: {e}")
         raise
+
 
 # DB: ChEMBL
 async def search_chembl_generic(entity_type: str, query: str, limit: int = 20) -> dict:
@@ -135,15 +141,15 @@ async def search_chembl_generic(entity_type: str, query: str, limit: int = 20) -
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError as e:
-        print(f"Error querying ChEMBL {entity_type}: {e}")
+        logger.error(f"Error querying ChEMBL {entity_type}: {e}")
         raise
 
 
 @mcp.tool()
 async def search_chembl_id_lookup(
     query: Annotated[str, Field(description="The query string to search for.")],
-    limit: Annotated[int, Field(description="The maximum number of results to return.")] = 20
-    ) -> dict:
+    limit: Annotated[int, Field(description="The maximum number of results to return.")] = 20,
+) -> dict:
     """
     Search for ChEMBL ID by query.
 
@@ -155,22 +161,26 @@ async def search_chembl_id_lookup(
     total_count = bulk.get("page_meta", {}).get("total_count", 0)
     parsed_results = []
     for result in bulk.get("chembl_id_lookups", []):
-        parsed_results.append({
-            "chembl_id": result.get("chembl_id"),
-            "entity_type": result.get("entity_type"),
-            "score": result.get("score")})
+        parsed_results.append(
+            {
+                "chembl_id": result.get("chembl_id"),
+                "entity_type": result.get("entity_type"),
+                "score": result.get("score"),
+            }
+        )
 
     return {"total_count": total_count, "results": parsed_results}
+
 
 @mcp.tool()
 async def search_chembl_target(query: str, limit: int = 20) -> dict:
     """
     Search for ChEMBL target by query.
-    
-    Targets in ChEMBL represent biological entities (proteins, protein complexes, 
-    nucleic acids, organisms, tissues, cell lines) that are the focus of drug 
+
+    Targets in ChEMBL represent biological entities (proteins, protein complexes,
+    nucleic acids, organisms, tissues, cell lines) that are the focus of drug
     discovery and bioactivity studies.
-    
+
     Args:
         query (str): Search query string. Can be:
             - Target name (e.g., "Thrombin", "EGFR", "Dopamine receptor")
@@ -179,7 +189,7 @@ async def search_chembl_target(query: str, limit: int = 20) -> dict:
             - Organism name (e.g., "Homo sapiens")
             - Any keywords related to target properties
         limit (int, optional): Maximum number of results to return. Defaults to 20.
-    
+
     Returns:
         dict: Dictionary containing:
             - 'total_count' (int): Total number of matching targets found
@@ -189,17 +199,17 @@ async def search_chembl_target(query: str, limit: int = 20) -> dict:
                 - 'organism' (str): Organism name (e.g., "Homo sapiens")
                 - 'type' (str): Target type (e.g., "SINGLE PROTEIN", "PROTEIN COMPLEX")
                 - 'score' (float): Relevance score for the search query
-    
+
     Example:
         >>> results = await search_chembl_target("EGFR human", limit=5)
         >>> print(f"Found {results['total_count']} targets")
         >>> for target in results['results']:
         ...     print(f"{target['chembl_id']}: {target['name']} ({target['organism']})")
-        
+
         Output:
         Found 15 targets
         CHEMBL203: Epidermal growth factor receptor (Homo sapiens)
-    
+
     Target Types:
         - SINGLE PROTEIN: Individual protein target
         - PROTEIN COMPLEX: Multi-protein complex
@@ -208,7 +218,7 @@ async def search_chembl_target(query: str, limit: int = 20) -> dict:
         - TISSUE: Tissue-level target
         - CELL-LINE: Cell line target
         - ORGANISM: Whole organism target
-    
+
     Raises:
         httpx.HTTPError: If the API request fails
     """
@@ -218,13 +228,15 @@ async def search_chembl_target(query: str, limit: int = 20) -> dict:
 
     parsed_results = []
     for target in bulk.get("targets", []):
-        parsed_results.append({
-            "chembl_id": target.get("target_chembl_id"),
-            "name": target.get("pref_name"),
-            "organism": target.get("organism"),
-            "type": target.get("target_type"),
-            "score": target.get("score")
-        })
+        parsed_results.append(
+            {
+                "chembl_id": target.get("target_chembl_id"),
+                "name": target.get("pref_name"),
+                "organism": target.get("organism"),
+                "type": target.get("target_type"),
+                "score": target.get("score"),
+            }
+        )
 
     return {"total_count": total_count, "results": parsed_results}
 
@@ -233,11 +245,11 @@ async def search_chembl_target(query: str, limit: int = 20) -> dict:
 async def search_chembl_molecule(query: str, limit: int = 20) -> dict:
     """
     Search for ChEMBL molecule by query.
-    
-    Molecules in ChEMBL represent small molecule drugs, drug candidates, and 
-    bioactive compounds with reported bioactivity data. This includes approved 
+
+    Molecules in ChEMBL represent small molecule drugs, drug candidates, and
+    bioactive compounds with reported bioactivity data. This includes approved
     drugs, clinical candidates, and research compounds.
-    
+
     Args:
         query (str): Search query string. Can be:
             - Molecule name (e.g., "Aspirin", "Imatinib", "Caffeine")
@@ -247,7 +259,7 @@ async def search_chembl_molecule(query: str, limit: int = 20) -> dict:
             - InChI or InChI Key
             - Any keywords related to molecule properties
         limit (int, optional): Maximum number of results to return. Defaults to 20.
-    
+
     Returns:
         dict: Dictionary containing:
             - 'total_count' (int): Total number of matching molecules found
@@ -255,29 +267,29 @@ async def search_chembl_molecule(query: str, limit: int = 20) -> dict:
                 - 'chembl_id' (str): ChEMBL molecule identifier (e.g., "CHEMBL25")
                 - 'name' (str): Preferred molecule name (may be None for some compounds)
                 - 'score' (float): Relevance score for the search query
-    
+
     Example:
         >>> results = await search_chembl_molecule("aspirin", limit=5)
         >>> print(f"Found {results['total_count']} molecules")
         >>> for molecule in results['results']:
         ...     print(f"{molecule['chembl_id']}: {molecule['name']} (score: {molecule['score']})")
-        
+
         Output:
         Found 3 molecules
         CHEMBL25: Aspirin (score: 23.5)
         CHEMBL1456: Acetylsalicylic acid derivative (score: 12.3)
-    
+
     Use Cases:
         - Finding ChEMBL IDs for known drugs or compounds
         - Discovering molecules with similar names
         - Searching for bioactive compounds by structure (using SMILES/InChI)
         - Identifying research compounds and clinical candidates
-    
+
     Note:
         - Some molecules may not have a preferred name and 'name' field will be None
         - Higher scores indicate better matches to the query
         - For structure-based searches, use SMILES or InChI notation
-    
+
     Raises:
         httpx.HTTPError: If the API request fails
     """
@@ -286,13 +298,16 @@ async def search_chembl_molecule(query: str, limit: int = 20) -> dict:
     total_count = bulk.get("page_meta", {}).get("total_count", 0)
     parsed_results = []
     for molecule in bulk.get("molecules", []):
-        parsed_results.append({
-            "chembl_id": molecule.get("molecule_chembl_id"),
-            "name": molecule.get("pref_name"),
-            "score": molecule.get("score")
-        })
+        parsed_results.append(
+            {
+                "chembl_id": molecule.get("molecule_chembl_id"),
+                "name": molecule.get("pref_name"),
+                "score": molecule.get("score"),
+            }
+        )
 
     return {"total_count": total_count, "results": parsed_results}
+
 
 # @mcp.tool()
 async def get_chembl_entity_by_id(service: str, chembl_id: str) -> str:
@@ -301,7 +316,8 @@ async def get_chembl_entity_by_id(service: str, chembl_id: str) -> str:
 
     Args:
         service (str): The service to use for the search. Supported values are:
-            - "activity" (for ChEMBL activity search, activity ID is an integer; remove the "CHEMBL" or "CHEMBL_ACT" prefixes)
+            - "activity" (for ChEMBL activity search, activity ID is
+              an integer; remove "CHEMBL" or "CHEMBL_ACT" prefixes)
             - "assay" (for ChEMBL assay search)
             - "assay_class" (for ChEMBL assay class search)
             - "atc_class" (for ChEMBL ATC class search)
@@ -341,7 +357,7 @@ async def get_chembl_entity_by_id(service: str, chembl_id: str) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error fetching ChEMBL entity {chembl_id}: {e}")
+        logger.error(f"Error fetching ChEMBL entity {chembl_id}: {e}")
         raise
 
 
@@ -364,8 +380,9 @@ async def get_pubchem_compound_id(compound_name: str) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error fetching PubChem compound ID for {compound_name}: {e}")
+        logger.error(f"Error fetching PubChem compound ID for {compound_name}: {e}")
         raise
+
 
 @mcp.tool()
 async def get_compound_attributes_from_pubchem(pubchem_compound_id: str) -> str:
@@ -386,8 +403,9 @@ async def get_compound_attributes_from_pubchem(pubchem_compound_id: str) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error fetching PubChem compound attributes for {pubchem_compound_id}: {e}")
+        logger.error(f"Error fetching PubChem compound attributes for {pubchem_compound_id}: {e}")
         raise
+
 
 # DB: PDB
 @mcp.tool()
@@ -418,8 +436,9 @@ async def search_pdb_entity(db: str, query: str, limit: int = 20) -> str:
         response_dict = {"total": total_results, "results": result_list}
         return json.dumps(response_dict)
     except httpx.HTTPError as e:
-        print(f"Error searching PDB {db} for {query}: {e}")
+        logger.error(f"Error searching PDB {db} for {query}: {e}")
         raise
+
 
 # DB: MeSH
 @mcp.tool()
@@ -436,29 +455,28 @@ async def search_mesh_descriptor(query: str, limit: int = 10) -> str:
     """
     toolcall_log("search_mesh_descriptor")
     url = "https://id.nlm.nih.gov/mesh/lookup/descriptor"
-    params = {"label": query,
-              "match": "contains",
-              "limit": limit}
+    params = {"label": query, "match": "contains", "limit": limit}
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params, timeout=30.0)
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error searching MeSH for {query}: {e}")
+        logger.error(f"Error searching MeSH for {query}: {e}")
         raise
+
 
 # DB: Reactome
 @mcp.tool()
 async def search_reactome_entity(
     query: str,
-    species: Optional[List[str]] = None,
-    types: Optional[List[str]] = None,
-    rows: int = 30
-) -> List[Dict[str, str]]:
+    species: list[str] | None = None,
+    types: list[str] | None = None,
+    rows: int = 30,
+) -> list[dict[str, str]]:
     """
     Search the Reactome knowledgebase using keyword search.
-    
+
     Parameters:
     -----------
     query : str
@@ -469,7 +487,7 @@ async def search_reactome_entity(
         Filter by entity types (e.g., ["Pathway", "Reaction", "Complex"])
     rows : int, default=30
         Number of results to return
-    
+
     Returns:
     --------
     list of dict
@@ -478,72 +496,64 @@ async def search_reactome_entity(
             {'id': 'R-HSA-109581', 'name': 'Apoptosis', 'type': 'Pathway'},
             {'id': 'R-HSA-204981', 'name': '14-3-3epsilon...', 'type': 'Reaction'}
         ]
-        
+
     Example:
     --------
     >>> results = search_reactome("apoptosis", rows=5)
     >>> for entry in results:
     ...     print(f"{entry['type']:10} {entry['id']}: {entry['name']}")
-    
+
     >>> # Filter by type
     >>> pathways = [r for r in results if r['type'] == 'Pathway']
     """
     toolcall_log("search_reactome_entity")
     # Build API request
     base_url = "https://reactome.org/ContentService/search/query"
-    params = {
-        "query": query,
-        "cluster": "true",
-        "start": 0,
-        "rows": rows
-    }
-    
+    params = {"query": query, "cluster": "true", "start": 0, "rows": rows}
+
     if species:
-        params["species"] = ','.join(species)
+        params["species"] = ",".join(species)
     if types:
-        params["types"] = ','.join(types)
-    
+        params["types"] = ",".join(types)
+
     # Make API call
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                base_url,
-                params=params,
-                headers={"Accept": "application/json"},
-                timeout=30.0
+                base_url, params=params, headers={"Accept": "application/json"}, timeout=30.0
             )
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPError as e:
-        print(f"Error querying Reactome: {e}")
+        logger.error(f"Error querying Reactome: {e}")
         raise
-    
+
     # Extract and return results
     results = []
     for result_group in data.get("results", []):
         for entry in result_group.get("entries", []):
             # Clean HTML highlighting tags from name
-            name = entry.get('name', 'N/A')
-            name = re.sub(r'<span class="highlighting"\s*>', '', name)
-            name = re.sub(r'</span>', '', name)
-            
-            results.append({
-                'id': entry.get('stId', entry.get('id', 'N/A')),
-                'name': name.strip(),
-                'type': entry.get('type', 'Unknown')
-            })
-    
+            name = entry.get("name", "N/A")
+            name = re.sub(r'<span class="highlighting"\s*>', "", name)
+            name = re.sub(r"</span>", "", name)
+
+            results.append(
+                {
+                    "id": entry.get("stId", entry.get("id", "N/A")),
+                    "name": name.strip(),
+                    "type": entry.get("type", "Unknown"),
+                }
+            )
+
     return results
+
 
 # DB: RhEA
 @mcp.tool()
-async def search_rhea_entity(
-    query: str,
-    limit: Optional[int] = 100
-) -> List[Dict[str, str]]:
+async def search_rhea_entity(query: str, limit: int | None = 100) -> list[dict[str, str]]:
     """
     Search Rhea database for biochemical reactions using keyword search.
-    
+
     Args:
         query (str): Search query string. Examples:
                     - "ATP" - find reactions involving ATP
@@ -551,12 +561,12 @@ async def search_rhea_entity(
                     - "uniprot:*" - reactions with UniProt annotations
                     - "" - retrieve all reactions
         limit (int, optional): Maximum number of results. Defaults to 100.
-    
+
     Returns:
         List[Dict[str, str]]: List of reactions, each containing:
             - 'rhea_id': Reaction identifier (e.g., "RHEA:10000")
             - 'equation': Reaction equation text
-    
+
     Example:
         >>> results = search_rhea_entity("ATP", limit=5)
         >>> for reaction in results:
@@ -565,38 +575,30 @@ async def search_rhea_entity(
     toolcall_log("search_rhea_entity")
     # API endpoint
     url = "https://www.rhea-db.org/rhea"
-    
-    params = {
-        "query": query,
-        "columns": "rhea-id,equation",
-        "format": "tsv",
-        "limit": limit
-    }
-    
+
+    params = {"query": query, "columns": "rhea-id,equation", "format": "tsv", "limit": limit}
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params, timeout=30.0)
         response.raise_for_status()
-        
+
         # Parse TSV response
-        lines = response.text.strip().split('\n')
-        
+        lines = response.text.strip().split("\n")
+
         if len(lines) < 2:
             return []
-        
+
         # First line is header, skip it
         results = []
         for line in lines[1:]:
             if line.strip():
-                parts = line.split('\t')
+                parts = line.split("\t")
                 if len(parts) >= 2:
-                    results.append({
-                        'rhea_id': parts[0],
-                        'equation': parts[1]
-                    })
-        
+                    results.append({"rhea_id": parts[0], "equation": parts[1]})
+
         return results
-    
+
     except httpx.HTTPError as e:
-        print(f"Error fetching data from Rhea API: {e}")
+        logger.error(f"Error fetching data from Rhea API: {e}")
         return []

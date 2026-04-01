@@ -5,8 +5,6 @@ FROM docker.io/astral/uv:python3.12-bookworm-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-ENV TOGOMCP_DIR=/app
-
 # Copy the entire project into the container
 COPY . .
 RUN uv sync
