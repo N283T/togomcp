@@ -16,6 +16,7 @@ Requires NCBI_API_KEY environment variable for optimal rate limits (10 req/sec v
 
 import asyncio
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -28,12 +29,14 @@ from .server import toolcall_log
 
 # Get API key from environment
 NCBI_API_KEY = os.environ.get("NCBI_API_KEY")
-NCBI_EMAIL = os.environ.get(
-    "NCBI_EMAIL", "your-email@example.com"
-)  # NCBI recommends providing email
+NCBI_EMAIL = os.environ.get("NCBI_EMAIL")
+if not NCBI_EMAIL:
+    NCBI_EMAIL = "togomcp@dbcls.jp"
+    logging.getLogger(__name__).warning("NCBI_EMAIL not set. Using default: %s", NCBI_EMAIL)
 
 # Rate limiting
 RATE_LIMIT_DELAY = 0.1 if NCBI_API_KEY else 0.34  # 10/sec with key, 3/sec without
+_ncbi_rate_limiter = asyncio.Semaphore(1)
 
 ncbi_mcp = FastMCP("NCBI API server")
 
@@ -216,25 +219,26 @@ async def _ncbi_esearch_api(
     if field:
         params["field"] = field
 
-    # Rate limiting
-    await asyncio.sleep(RATE_LIMIT_DELAY)
+    # Rate limiting with semaphore to prevent concurrent request bursts
+    async with _ncbi_rate_limiter:
+        await asyncio.sleep(RATE_LIMIT_DELAY)
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.get(base_url, params=params)
-            response.raise_for_status()
-            data = response.json()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.get(base_url, params=params)
+                response.raise_for_status()
+                data = response.json()
 
-            # Check for errors in NCBI response
-            if "error" in data:
-                raise NCBISearchError(f"NCBI API error: {data['error']}")
+                # Check for errors in NCBI response
+                if "error" in data:
+                    raise NCBISearchError(f"NCBI API error: {data['error']}")
 
-            return data
+                return data
 
-        except httpx.HTTPError as e:
-            raise NCBISearchError(f"HTTP error occurred: {str(e)}")
-        except Exception as e:
-            raise NCBISearchError(f"Error querying NCBI: {str(e)}")
+            except httpx.HTTPError as e:
+                raise NCBISearchError(f"HTTP error occurred: {str(e)}")
+            except Exception as e:
+                raise NCBISearchError(f"Error querying NCBI: {str(e)}")
 
 
 def _format_esearch_result(
@@ -476,20 +480,21 @@ async def ncbi_esummary(database: str, ids: list[str]) -> list[TextContent]:
     if NCBI_API_KEY:
         params["api_key"] = NCBI_API_KEY
 
-    await asyncio.sleep(RATE_LIMIT_DELAY)
+    async with _ncbi_rate_limiter:
+        await asyncio.sleep(RATE_LIMIT_DELAY)
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(base_url, params=params)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(base_url, params=params)
+                response.raise_for_status()
+                data = response.json()
 
-            # Format the response nicely
-            formatted_json = json.dumps(data, indent=2)
-            return [TextContent(type="text", text=formatted_json)]
+                # Format the response nicely
+                formatted_json = json.dumps(data, indent=2)
+                return [TextContent(type="text", text=formatted_json)]
 
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error fetching summaries: {str(e)}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error fetching summaries: {str(e)}")]
 
 
 @ncbi_mcp.tool()
@@ -529,13 +534,14 @@ async def ncbi_efetch(
     if NCBI_API_KEY:
         params["api_key"] = NCBI_API_KEY
 
-    await asyncio.sleep(RATE_LIMIT_DELAY)
+    async with _ncbi_rate_limiter:
+        await asyncio.sleep(RATE_LIMIT_DELAY)
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(base_url, params=params)
-            response.raise_for_status()
-            return [TextContent(type="text", text=response.text)]
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(base_url, params=params)
+                response.raise_for_status()
+                return [TextContent(type="text", text=response.text)]
 
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error fetching records: {str(e)}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error fetching records: {str(e)}")]
