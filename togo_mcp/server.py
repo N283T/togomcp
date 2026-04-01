@@ -3,9 +3,9 @@ import logging
 import os
 from pathlib import Path
 
-import httpx
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_request
+import httpx
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse
 
@@ -28,23 +28,22 @@ def toolcall_log(funname: str) -> None:
     except RuntimeError:
         # No HTTP request context (e.g., called via MCP)
         logger.info(f"TogoMCP_tool: {funname}, IP: MCP-call")
-    return None
 
 
 # The MIE files are used to define the shape expressions for SPARQL queries.
 # When installed as a package, resolve paths relative to the bundled data directory.
 # The TOGOMCP_DIR env var can override this for development or custom deployments.
-_PACKAGE_DATA_DIR = str(Path(__file__).parent / "data")
-CWD = os.getenv("TOGOMCP_DIR", _PACKAGE_DATA_DIR)
-MIE_DIR = CWD + "/mie"
-MIE_PROMPT = CWD + "/resources/MIE_prompt.md"
-TOGOMCP_USAGE_GUIDE = CWD + "/resources/togomcp_usage_guide_v2.md"
-SPARQL_EXAMPLES = CWD + "/sparql-examples"
-ENDPOINTS_CSV = CWD + "/resources/endpoints.csv"
-INDEX_HTML = CWD + "/docs/togomcp-intro.html"
+_PACKAGE_DATA_DIR = Path(__file__).parent.joinpath("data")
+CWD = Path(os.getenv("TOGOMCP_DIR", str(_PACKAGE_DATA_DIR)))
+MIE_DIR = CWD.joinpath("mie")
+MIE_PROMPT = CWD.joinpath("resources", "MIE_prompt.md")
+TOGOMCP_USAGE_GUIDE = CWD.joinpath("resources", "togomcp_usage_guide_v2.md")
+SPARQL_EXAMPLES = CWD.joinpath("sparql-examples")
+ENDPOINTS_CSV = CWD.joinpath("resources", "endpoints.csv")
+INDEX_HTML = CWD.joinpath("docs", "togomcp-intro.html")
 
 
-def load_sparql_endpoints(path: str) -> dict[str, dict[str, str]]:
+def load_sparql_endpoints(path: str | os.PathLike) -> dict[str, dict[str, str]]:
     """Load SPARQL endpoints from a CSV file.
 
     Returns a dictionary keyed by database name with values containing:
@@ -68,7 +67,13 @@ def load_sparql_endpoints(path: str) -> dict[str, dict[str, str]]:
 
 
 # The SPARQL endpoints for various RDF databases, loaded from a CSV file.
-SPARQL_ENDPOINT = load_sparql_endpoints(ENDPOINTS_CSV)
+try:
+    SPARQL_ENDPOINT = load_sparql_endpoints(ENDPOINTS_CSV)
+except FileNotFoundError:
+    raise RuntimeError(
+        f"SPARQL endpoints CSV not found at '{ENDPOINTS_CSV}'. "
+        f"Ensure the package data is correctly installed or set TOGOMCP_DIR."
+    ) from None
 DBNAME_DESCRIPTION = f"Database name: One of {','.join(SPARQL_ENDPOINT.keys())}"
 
 # Build reverse lookups for endpoint_name -> url and list of databases per endpoint

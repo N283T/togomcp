@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from typing import Annotated
 
@@ -6,6 +7,8 @@ import httpx
 from pydantic import Field
 
 from .server import mcp, toolcall_log
+
+logger = logging.getLogger(__name__)
 
 
 ######################################
@@ -113,7 +116,7 @@ async def search_uniprot_entity(query: str, limit: int = 20) -> str:
         data = response.text
         return data
     except httpx.HTTPError as e:
-        print(f"Error querying UniProt: {e}")
+        logger.error(f"Error querying UniProt: {e}")
         raise
 
 
@@ -138,7 +141,7 @@ async def search_chembl_generic(entity_type: str, query: str, limit: int = 20) -
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError as e:
-        print(f"Error querying ChEMBL {entity_type}: {e}")
+        logger.error(f"Error querying ChEMBL {entity_type}: {e}")
         raise
 
 
@@ -354,7 +357,7 @@ async def get_chembl_entity_by_id(service: str, chembl_id: str) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error fetching ChEMBL entity {chembl_id}: {e}")
+        logger.error(f"Error fetching ChEMBL entity {chembl_id}: {e}")
         raise
 
 
@@ -377,7 +380,7 @@ async def get_pubchem_compound_id(compound_name: str) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error fetching PubChem compound ID for {compound_name}: {e}")
+        logger.error(f"Error fetching PubChem compound ID for {compound_name}: {e}")
         raise
 
 
@@ -400,7 +403,7 @@ async def get_compound_attributes_from_pubchem(pubchem_compound_id: str) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error fetching PubChem compound attributes for {pubchem_compound_id}: {e}")
+        logger.error(f"Error fetching PubChem compound attributes for {pubchem_compound_id}: {e}")
         raise
 
 
@@ -433,7 +436,7 @@ async def search_pdb_entity(db: str, query: str, limit: int = 20) -> str:
         response_dict = {"total": total_results, "results": result_list}
         return json.dumps(response_dict)
     except httpx.HTTPError as e:
-        print(f"Error searching PDB {db} for {query}: {e}")
+        logger.error(f"Error searching PDB {db} for {query}: {e}")
         raise
 
 
@@ -459,7 +462,7 @@ async def search_mesh_descriptor(query: str, limit: int = 10) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"Error searching MeSH for {query}: {e}")
+        logger.error(f"Error searching MeSH for {query}: {e}")
         raise
 
 
@@ -522,7 +525,7 @@ async def search_reactome_entity(
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPError as e:
-        print(f"Error querying Reactome: {e}")
+        logger.error(f"Error querying Reactome: {e}")
         raise
 
     # Extract and return results
@@ -597,5 +600,5 @@ async def search_rhea_entity(query: str, limit: int | None = 100) -> list[dict[s
         return results
 
     except httpx.HTTPError as e:
-        print(f"Error fetching data from Rhea API: {e}")
+        logger.error(f"Error fetching data from Rhea API: {e}")
         return []

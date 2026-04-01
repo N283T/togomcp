@@ -1,9 +1,9 @@
+import logging
 import os
-import sys
 from typing import Annotated, Any
 
-import yaml
 from pydantic import Field
+import yaml
 
 from .server import (
     DBNAME_DESCRIPTION,
@@ -17,6 +17,8 @@ from .server import (
     mcp,
     toolcall_log,
 )
+
+logger = logging.getLogger(__name__)
 
 # @mcp.resource("resource://boilerplate")
 # def boilerplate() -> str:
@@ -44,8 +46,8 @@ def togomcp_usage_guide() -> str:
       this guide first to learn the correct workflow for your
       specific query type.
 
-        Returns:
-            str: The content of the TogoMCP usage guide.
+    Returns:
+        str: The content of the TogoMCP usage guide.
     """
     toolcall_log("togomcp_usage_guide")
     with open(TOGOMCP_USAGE_GUIDE, encoding="utf-8") as file:
@@ -139,14 +141,11 @@ async def run_sparql(
     name="get_graph_list", description="Get a list of named graphs in a specific RDF database."
 )
 async def get_graph_list(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTION)]) -> str:
-    f"""
-    Get a list of named graphs in a specific RDF database.
+    """Get a list of named graphs in a specific RDF database.
 
     Args:
         dbname (str): The name of the database for which to retrieve
             the named graphs.
-            Supported values are
-            {", ".join(SPARQL_ENDPOINT.keys())}.
 
     Returns:
         str: CSV-formatted list of named graphs.
@@ -173,44 +172,30 @@ SELECT DISTINCT ?graph WHERE {
     ),
 )
 async def get_MIE_file(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTION)]) -> str:
-    f"""
-    Get the MIE file containing the ShEx schema, RDF and SPARQL
-    examples of a specific RDF database in YAML format, which can
-    be used as a hint to build SPARQL queries.
+    """Get the MIE file containing the ShEx schema, RDF and SPARQL examples.
+
+    Returns the content of a specific RDF database's MIE file in YAML format,
+    which can be used as a hint to build SPARQL queries.
 
     Args:
         dbname (str): The name of the database for which to
             retrieve the shape expression.
-            Supported values are
-            {", ".join(SPARQL_ENDPOINT.keys())}."
 
     Returns:
         str: The MIE file containing the RDF schema information in YAML format.
     """
     toolcall_log("get_MIE_file")
-    mie_file = MIE_DIR + "/" + dbname + ".yaml"
-    drop_keys = []
-    #    drop_keys += ["data_statistics", "architectural_notes"]
-    #    drop_keys += ["validation_notes"]
+    mie_file = os.path.join(MIE_DIR, f"{dbname}.yaml")
     if not os.path.exists(mie_file):
         return f"Error: The MIE file for '{dbname}' was not found."
     try:
         with open(mie_file, encoding="utf-8") as file:
             content = yaml.safe_load(file)
-            content2 = {}
-            if isinstance(content, dict):
-                for key, value in content.items():
-                    if key not in drop_keys:
-                        content2[key] = value
-                yaml_dump = yaml.dump(content2, sort_keys=False)
-            else:
-                # If not a dictionary, just dump the original content
-                yaml_dump = yaml.dump(content, sort_keys=False)
-
+            yaml_dump = yaml.dump(content, sort_keys=False)
             response_text = f"""Content-type: application/yaml; charset=utf-8
 {yaml_dump}"""
             return response_text
-    except Exception as e:
+    except (OSError, yaml.YAMLError) as e:
         return f"Error reading MIE file for '{dbname}': {e}"
 
 
@@ -267,8 +252,8 @@ def list_databases() -> list[dict[str, Any]]:
     toolcall_log("list_databases")
     resources_dir = MIE_DIR
     if not os.path.isdir(resources_dir):
-        print(f"Error: Directory '{resources_dir}' not found.", file=sys.stderr)
-        return []
+        logger.error(f"Directory '{resources_dir}' not found.")
+        raise FileNotFoundError(f"MIE directory not found: {resources_dir}")
 
     all_schemas_info = []
     for db_name in sorted(SPARQL_ENDPOINT.keys()):

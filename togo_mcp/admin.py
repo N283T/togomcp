@@ -4,10 +4,10 @@ from typing import Annotated
 from pydantic import Field
 
 from .server import (
+    CWD,
     DBNAME_DESCRIPTION,
     MIE_DIR,
     MIE_PROMPT,
-    SPARQL_ENDPOINT,
     SPARQL_EXAMPLES,
     mcp,
     toolcall_log,
@@ -19,12 +19,10 @@ from .server import (
     description="Instructions for generating an MIE (Metadata Interoperability Exchange) file",
 )
 def generate_MIE_file(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTION)]) -> str:
-    f"""
-    Explore a specific RDF database to generate an MIE file for SPARQL queries.
+    """Explore a specific RDF database to generate an MIE file for SPARQL queries.
 
     Args:
         dbname (str): The name of the database to explore.
-            Supported values are {", ".join(SPARQL_ENDPOINT.keys())}.
 
     Returns:
         str: The prompt for generating the MIE file for the database.
@@ -48,14 +46,14 @@ async def get_shex(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTION)]
     Returns:
         str: The ShEx schema in ShEx format.
     """
-    shex_file = "shex/" + dbname + ".shex"
+    shex_file = os.path.join(CWD, "shex", dbname + ".shex")
     if not os.path.exists(shex_file):
         return f"Error: The shex file for '{dbname}' was not found."
     try:
         with open(shex_file, encoding="utf-8") as file:
             content = file.read()
             return content
-    except Exception as e:
+    except OSError as e:
         return f"Error reading shex file for '{dbname}': {e}"
 
 
@@ -80,7 +78,7 @@ def get_sparql_example(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTI
     try:
         with open(example_file, encoding="utf-8") as file:
             return file.read()
-    except Exception as e:
+    except OSError as e:
         return f"Error reading SPARQL example file for '{dbname}': {e}"
 
 

@@ -24,6 +24,8 @@ def run_local():
 
 
 def run_admin():
+    import togo_mcp.admin  # noqa: F401 -- registers admin tools/prompts
+
     asyncio.run(setup())
     mcp.run()
 

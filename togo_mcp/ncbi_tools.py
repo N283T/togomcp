@@ -15,12 +15,13 @@ Requires NCBI_API_KEY environment variable for optimal rate limits (10 req/sec v
 """
 
 import asyncio
+import json
 import os
 import re
 from typing import Any
 
-import httpx
 from fastmcp import FastMCP
+import httpx
 from mcp.types import TextContent
 
 from .server import toolcall_log
@@ -484,8 +485,6 @@ async def ncbi_esummary(database: str, ids: list[str]) -> list[TextContent]:
             data = response.json()
 
             # Format the response nicely
-            import json
-
             formatted_json = json.dumps(data, indent=2)
             return [TextContent(type="text", text=formatted_json)]
 

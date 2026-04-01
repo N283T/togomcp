@@ -1,5 +1,5 @@
-import httpx
 from fastmcp import FastMCP
+import httpx
 
 from .server import toolcall_log
 
