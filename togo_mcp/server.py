@@ -23,7 +23,8 @@ def toolcall_log(funname: str) -> None:
     """
     try:
         request: Request = get_http_request()
-        user_ip = request.headers.get("X-Forwarded-For", None)
+        raw_ip = request.headers.get("X-Forwarded-For", "unknown")
+        user_ip = raw_ip.split(",")[0].strip()[:45]
         logger.info(f"TogoMCP_tool: {funname}, IP: {user_ip}")
     except RuntimeError:
         # No HTTP request context (e.g., called via MCP)
@@ -146,7 +147,7 @@ async def execute_sparql(
     """
     url = resolve_endpoint_url(dbname, endpoint_name, endpoint_url)
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             url, data={"query": sparql_query}, headers={"Accept": "text/csv"}
         )
