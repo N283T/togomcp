@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx
 from pydantic import Field
@@ -309,58 +309,6 @@ async def search_chembl_molecule(query: str, limit: int = 20) -> dict:
     return {"total_count": total_count, "results": parsed_results}
 
 
-# @mcp.tool()
-async def get_chembl_entity_by_id(service: str, chembl_id: str) -> str:
-    """
-    Get ChEMBL entity by ID.
-
-    Args:
-        service (str): The service to use for the search. Supported values are:
-            - "activity" (for ChEMBL activity search, activity ID is
-              an integer; remove "CHEMBL" or "CHEMBL_ACT" prefixes)
-            - "assay" (for ChEMBL assay search)
-            - "assay_class" (for ChEMBL assay class search)
-            - "atc_class" (for ChEMBL ATC class search)
-            - "binding_site" (for ChEMBL binding site search)
-            - "biotherapeutic" (for ChEMBL biotherapeutic search)
-            - "cell_line" (for ChEMBL cell line search)
-            - "chembl_id_lookup" (for ChEMBL ID lookup)
-            - "chembl_release" (for ChEMBL release search)
-            - "compound_record" (for ChEMBL compound search)
-            - "compound_structural_alert" (for ChEMBL compound structural alert search)
-            - "document" (for ChEMBL document search)
-            - "drug" (for ChEMBL drug search)
-            - "drug_indication" (for ChEMBL drug indication search)
-            - "drug_warning" (for ChEMBL drug warning search)
-            - "go_slim" (for ChEMBL GO slim search)
-            - "image" (for ChEMBL image search)
-            - "mechanism" (for ChEMBL mechanism search)
-            - "metabolism" (for ChEMBL metabolism search)
-            - "molecule" (for ChEMBL molecule search)
-            - "molecule_form" (for ChEMBL molecule form search)
-            - "organism" (for ChEMBL organism search)
-            - "protein_classification" (for ChEMBL protein classification search)
-            - "source" (for ChEMBL source search)
-            - "target" (for ChEMBL target search)
-            - "target_relation" (for ChEMBL target relation search)
-            - "tissue" (for ChEMBL tissue search)
-            - "xref_source" (for ChEMBL cross-reference source search)
-
-        chembl_id (str): The ChEMBL ID to search for.
-
-    """
-    toolcall_log("get_chembl_entity_by_id")
-    url = f"https://www.ebi.ac.uk/chembl/api/data/{service}/{chembl_id}.json"
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=30.0)
-        response.raise_for_status()
-        return response.text
-    except httpx.HTTPError as e:
-        logger.error(f"Error fetching ChEMBL entity {chembl_id}: {e}")
-        raise
-
-
 # DB: PubChem
 @mcp.tool()
 async def get_pubchem_compound_id(compound_name: str) -> str:
@@ -409,7 +357,7 @@ async def get_compound_attributes_from_pubchem(pubchem_compound_id: str) -> str:
 
 # DB: PDB
 @mcp.tool()
-async def search_pdb_entity(db: str, query: str, limit: int = 20) -> str:
+async def search_pdb_entity(db: Literal["pdb", "cc", "prd"], query: str, limit: int = 20) -> str:
     """
     Search for PDBj entry information by keywords.
 
@@ -425,10 +373,10 @@ async def search_pdb_entity(db: str, query: str, limit: int = 20) -> str:
         str: A JSON-formatted string containing the search results.
     """
     toolcall_log("search_pdb_entity")
-    url = f"https://pdbj.org/rest/newweb/search/{db}?query={query}"
+    url = f"https://pdbj.org/rest/newweb/search/{db}"
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=30.0)
+            response = await client.get(url, params={"query": query}, timeout=30.0)
         response.raise_for_status()
         # Parse the response as JSON
         total_results = response.json().get("total", 0)
