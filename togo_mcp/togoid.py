@@ -1,9 +1,24 @@
+import atexit
+
 from fastmcp import FastMCP
 import httpx
 
 from .server import toolcall_log
 
 _client = httpx.AsyncClient(base_url="https://api.togoid.dbcls.jp")
+
+
+def _close_client():
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_client.aclose())
+    except RuntimeError:
+        asyncio.run(_client.aclose())
+
+
+atexit.register(_close_client)
 togoid_mcp = FastMCP("TogoID API server")
 
 
