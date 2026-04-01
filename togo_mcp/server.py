@@ -15,11 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 def toolcall_log(funname: str) -> None:
-    """
-    toolcall_log
+    """Log a tool call with the caller's IP address.
 
-    :param funname: The name of the tool being called.
-    :type funname: str
+    Args:
+        funname (str): The name of the tool being called.
     """
     try:
         request: Request = get_http_request()
@@ -88,6 +87,9 @@ for dbname, info in SPARQL_ENDPOINT.items():
     ENDPOINT_NAME_TO_DATABASES[ep_name].append(dbname)
 
 ENDPOINT_NAMES = list(ENDPOINT_NAME_TO_URL.keys())
+
+# Shared httpx.AsyncClient for SPARQL queries
+_sparql_client = httpx.AsyncClient(timeout=60.0)
 SPARQL_ENDPOINT_KEYS = list(SPARQL_ENDPOINT.keys())
 
 
@@ -147,10 +149,9 @@ async def execute_sparql(
     """
     url = resolve_endpoint_url(dbname, endpoint_name, endpoint_url)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            url, data={"query": sparql_query}, headers={"Accept": "text/csv"}
-        )
+    response = await _sparql_client.post(
+        url, data={"query": sparql_query}, headers={"Accept": "text/csv"}
+    )
     response.raise_for_status()
     return response.text
 

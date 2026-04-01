@@ -1,4 +1,3 @@
-import os
 from typing import Annotated
 
 from pydantic import Field
@@ -46,8 +45,8 @@ async def get_shex(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTION)]
     Returns:
         str: The ShEx schema in ShEx format.
     """
-    shex_file = os.path.join(CWD, "shex", dbname + ".shex")
-    if not os.path.exists(shex_file):
+    shex_file = CWD.joinpath("shex", dbname + ".shex")
+    if not shex_file.exists():
         return f"Error: The shex file for '{dbname}' was not found."
     try:
         with open(shex_file, encoding="utf-8") as file:
@@ -72,8 +71,8 @@ def get_sparql_example(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTI
         str: The content of the SPARQL example file, or an error message if not found.
     """
     toolcall_log("get_sparql_example")
-    example_file = os.path.join(SPARQL_EXAMPLES, f"{dbname}.rq")
-    if not os.path.exists(example_file):
+    example_file = SPARQL_EXAMPLES.joinpath(f"{dbname}.rq")
+    if not example_file.exists():
         return f"Error: The SPARQL example file for '{dbname}' was not found at '{example_file}'."
     try:
         with open(example_file, encoding="utf-8") as file:
@@ -100,9 +99,9 @@ def save_MIE_file(
     """
     try:
         # Ensure the MIE directory exists
-        os.makedirs(MIE_DIR, exist_ok=True)
+        MIE_DIR.mkdir(parents=True, exist_ok=True)
 
-        file_path = os.path.join(MIE_DIR, f"{dbname}.yaml")
+        file_path = MIE_DIR.joinpath(f"{dbname}.yaml")
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(mie_content)
         return f"Successfully saved MIE file to {file_path}."

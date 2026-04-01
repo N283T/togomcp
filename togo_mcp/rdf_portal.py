@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -181,16 +180,12 @@ async def get_MIE_file(dbname: Annotated[str, Field(description=DBNAME_DESCRIPTI
         str: The MIE file containing the RDF schema information in YAML format.
     """
     toolcall_log("get_MIE_file")
-    mie_file = os.path.join(MIE_DIR, f"{dbname}.yaml")
-    if not os.path.exists(mie_file):
-        return f"Error: The MIE file for '{dbname}' was not found."
-    try:
-        with open(mie_file, encoding="utf-8") as file:
-            content = file.read()
-            response_text = f"Content-type: application/yaml; charset=utf-8\n{content}"
-            return response_text
-    except OSError as e:
-        return f"Error reading MIE file for '{dbname}': {e}"
+    mie_file = MIE_DIR.joinpath(f"{dbname}.yaml")
+    if not mie_file.exists():
+        raise FileNotFoundError(f"The MIE file for '{dbname}' was not found.")
+    content = mie_file.read_text(encoding="utf-8")
+    response_text = f"Content-type: application/yaml; charset=utf-8\n{content}"
+    return response_text
 
 
 _cached_databases: list[dict[str, Any]] | None = None
@@ -251,14 +246,14 @@ def list_databases() -> list[dict[str, Any]]:
     if _cached_databases is not None:
         return _cached_databases
     resources_dir = MIE_DIR
-    if not os.path.isdir(resources_dir):
+    if not resources_dir.is_dir():
         logger.error(f"Directory '{resources_dir}' not found.")
         raise FileNotFoundError(f"MIE directory not found: {resources_dir}")
 
     all_schemas_info = []
     for db_name in sorted(SPARQL_ENDPOINT.keys()):
         filename = db_name + ".yaml"
-        file_path = os.path.join(resources_dir, filename)
+        file_path = resources_dir.joinpath(filename)
         try:
             with open(file_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)

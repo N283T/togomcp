@@ -10,6 +10,15 @@ from .server import mcp, toolcall_log
 
 logger = logging.getLogger(__name__)
 
+# Shared httpx.AsyncClient instances (one per upstream service)
+_uniprot_client = httpx.AsyncClient(base_url="https://rest.uniprot.org", timeout=30.0)
+_chembl_client = httpx.AsyncClient(base_url="https://www.ebi.ac.uk", timeout=30.0)
+_pubchem_client = httpx.AsyncClient(timeout=30.0)
+_pdbj_client = httpx.AsyncClient(base_url="https://pdbj.org", timeout=30.0)
+_mesh_client = httpx.AsyncClient(base_url="https://id.nlm.nih.gov", timeout=30.0)
+_reactome_client = httpx.AsyncClient(base_url="https://reactome.org", timeout=30.0)
+_rhea_client = httpx.AsyncClient(base_url="https://www.rhea-db.org", timeout=30.0)
+
 
 ######################################
 #####　Database-specific tools ########
@@ -102,7 +111,6 @@ async def search_uniprot_entity(query: str, limit: int = 20) -> str:
         str: TSV-formatted results with columns: accession, protein_name, organism_name.
     """
     toolcall_log("search_uniprot_entity")
-    url = "https://rest.uniprot.org/uniprotkb/search"
     params = {
         "query": query,
         "fields": "accession,protein_name,organism_name",
@@ -110,8 +118,7 @@ async def search_uniprot_entity(query: str, limit: int = 20) -> str:
         "size": limit,
     }
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=30.0)
+        response = await _uniprot_client.get("/uniprotkb/search", params=params)
         response.raise_for_status()
         data = response.text
         return data
@@ -133,11 +140,11 @@ async def search_chembl_generic(entity_type: str, query: str, limit: int = 20) -
     Returns:
         A dictionary parsed from the JSON response.
     """
-    url = f"https://www.ebi.ac.uk/chembl/api/data/{entity_type}/search.json"
     params = {"q": query, "limit": limit}
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=30.0)
+        response = await _chembl_client.get(
+            f"/chembl/api/data/{entity_type}/search.json", params=params
+        )
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError as e:
@@ -323,8 +330,7 @@ async def get_pubchem_compound_id(compound_name: str) -> str:
     toolcall_log("get_pubchem_compound_id")
     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{compound_name}/cids/JSON"
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=30.0)
+        response = await _pubchem_client.get(url)
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
@@ -346,8 +352,7 @@ async def get_compound_attributes_from_pubchem(pubchem_compound_id: str) -> str:
     url = "https://togodx.dbcls.jp/human/sparqlist/api/metastanza_pubchem_compound"
     params = {"id": pubchem_compound_id}
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=30.0)
+        response = await _pubchem_client.get(url, params=params)
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
@@ -373,10 +378,8 @@ async def search_pdb_entity(db: Literal["pdb", "cc", "prd"], query: str, limit: 
         str: A JSON-formatted string containing the search results.
     """
     toolcall_log("search_pdb_entity")
-    url = f"https://pdbj.org/rest/newweb/search/{db}"
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params={"query": query}, timeout=30.0)
+        response = await _pdbj_client.get(f"/rest/newweb/search/{db}", params={"query": query})
         response.raise_for_status()
         # Parse the response as JSON
         total_results = response.json().get("total", 0)
@@ -402,11 +405,9 @@ async def search_mesh_descriptor(query: str, limit: int = 10) -> str:
         str: A JSON-formatted string containing the search results.
     """
     toolcall_log("search_mesh_descriptor")
-    url = "https://id.nlm.nih.gov/mesh/lookup/descriptor"
     params = {"label": query, "match": "contains", "limit": limit}
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=30.0)
+        response = await _mesh_client.get("/mesh/lookup/descriptor", params=params)
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
@@ -422,41 +423,31 @@ async def search_reactome_entity(
     types: list[str] | None = None,
     rows: int = 30,
 ) -> list[dict[str, str]]:
-    """
-    Search the Reactome knowledgebase using keyword search.
+    """Search the Reactome knowledgebase using keyword search.
 
-    Parameters:
-    -----------
-    query : str
-        The search query string (e.g., "apoptosis", "TP53", "cell cycle")
-    species : list of str, optional
-        Filter by species (e.g., ["Homo sapiens"], ["9606"])
-    types : list of str, optional
-        Filter by entity types (e.g., ["Pathway", "Reaction", "Complex"])
-    rows : int, default=30
-        Number of results to return
+    Args:
+        query (str): The search query string (e.g., "apoptosis", "TP53", "cell cycle").
+        species (list[str] | None): Filter by species (e.g., ["Homo sapiens"], ["9606"]).
+        types (list[str] | None): Filter by entity types (e.g., ["Pathway", "Reaction", "Complex"]).
+        rows (int): Number of results to return. Defaults to 30.
 
     Returns:
-    --------
-    list of dict
-        List of results with 'id', 'name', and 'type' fields
-        Example: [
-            {'id': 'R-HSA-109581', 'name': 'Apoptosis', 'type': 'Pathway'},
-            {'id': 'R-HSA-204981', 'name': '14-3-3epsilon...', 'type': 'Reaction'}
-        ]
+        list[dict[str, str]]: List of results with 'id', 'name', and 'type' fields.
+            Example: [
+                {'id': 'R-HSA-109581', 'name': 'Apoptosis', 'type': 'Pathway'},
+                {'id': 'R-HSA-204981', 'name': '14-3-3epsilon...', 'type': 'Reaction'}
+            ]
 
     Example:
-    --------
-    >>> results = search_reactome("apoptosis", rows=5)
-    >>> for entry in results:
-    ...     print(f"{entry['type']:10} {entry['id']}: {entry['name']}")
+        >>> results = search_reactome("apoptosis", rows=5)
+        >>> for entry in results:
+        ...     print(f"{entry['type']:10} {entry['id']}: {entry['name']}")
 
-    >>> # Filter by type
-    >>> pathways = [r for r in results if r['type'] == 'Pathway']
+        >>> # Filter by type
+        >>> pathways = [r for r in results if r['type'] == 'Pathway']
     """
     toolcall_log("search_reactome_entity")
     # Build API request
-    base_url = "https://reactome.org/ContentService/search/query"
     params = {"query": query, "cluster": "true", "start": 0, "rows": rows}
 
     if species:
@@ -466,10 +457,11 @@ async def search_reactome_entity(
 
     # Make API call
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                base_url, params=params, headers={"Accept": "application/json"}, timeout=30.0
-            )
+        response = await _reactome_client.get(
+            "/ContentService/search/query",
+            params=params,
+            headers={"Accept": "application/json"},
+        )
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPError as e:
@@ -521,14 +513,11 @@ async def search_rhea_entity(query: str, limit: int | None = 100) -> list[dict[s
         ...     print(f"{reaction['rhea_id']}: {reaction['equation']}")
     """
     toolcall_log("search_rhea_entity")
-    # API endpoint
-    url = "https://www.rhea-db.org/rhea"
 
     params = {"query": query, "columns": "rhea-id,equation", "format": "tsv", "limit": limit}
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=30.0)
+        response = await _rhea_client.get("/rhea", params=params)
         response.raise_for_status()
 
         # Parse TSV response
@@ -549,4 +538,4 @@ async def search_rhea_entity(query: str, limit: int | None = 100) -> list[dict[s
 
     except httpx.HTTPError as e:
         logger.error(f"Error fetching data from Rhea API: {e}")
-        return []
+        raise
