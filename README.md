@@ -142,8 +142,8 @@ mainly need to reproduce or debug SPARQL runs.
 ### Docker
 
 `compose.yaml` bind-mounts `./logs` (and `./logs-test`) on the host to
-`/var/log/togomcp` inside each container and passes through `TOGOMCP_QUERY_LOG`
-/ `TOGOMCP_QUERY_LOG_TEST` from `.env`. Opt in:
+`/var/log/togomcp` inside each container and passes through the query-log and
+SPARQL-history logging env vars from `.env`. Opt in:
 
 ```bash
 echo 'TOGOMCP_QUERY_LOG=/var/log/togomcp/togomcp.jsonl' >> .env
@@ -161,9 +161,10 @@ docker compose up -d togomcp-main
 tail -f logs/sparql-history.jsonl
 ```
 
-The path in the env var is the **container-side** path; the bind mount makes
-the same file visible at `./logs/togomcp.jsonl` on your host. Leaving the var
-unset keeps logging off — no compose changes needed.
+The path in each env var is the **container-side** path. Container paths under
+`/var/log/togomcp/<file>.jsonl` appear as `./logs/<file>.jsonl` for
+`togomcp-main` and `./logs-test/<file>.jsonl` for `togomcp-test`. Leaving the
+vars unset keeps logging off — no compose changes needed.
 
 ### Claude Desktop (local stdio)
 
