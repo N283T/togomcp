@@ -126,6 +126,19 @@ and reconstructing multi-tool sequences.
 (zero-overhead default). Set to a writable file path to enable.
 Output uses `RotatingFileHandler` (50 MB × 10, ~500 MB cap).
 
+### SPARQL History Logging (Optional)
+
+For reproducibility, TogoMCP can also record a SPARQL-only execution history.
+Set `TOGOMCP_SPARQL_HISTORY` to a writable JSONL path. Each `run_sparql` call
+appends the exact SPARQL text, original database/endpoint arguments, resolved
+endpoint URL, status, HTTP code, elapsed time, row/byte counts, query SHA-256,
+and result SHA-256. Full result bodies are not stored; only the exact query
+text and compact execution metadata/result hash are recorded.
+
+This is separate from `TOGOMCP_QUERY_LOG`: use `TOGOMCP_QUERY_LOG` for complete
+MCP tool-call auditing across all tools, and `TOGOMCP_SPARQL_HISTORY` when you
+mainly need to reproduce or debug SPARQL runs.
+
 ### Docker
 
 `compose.yaml` bind-mounts `./logs` (and `./logs-test`) on the host to
@@ -137,6 +150,15 @@ echo 'TOGOMCP_QUERY_LOG=/var/log/togomcp/togomcp.jsonl' >> .env
 mkdir -p logs
 docker compose up -d togomcp-main
 tail -f logs/togomcp.jsonl
+```
+
+To enable SPARQL history in Docker as well:
+
+```bash
+echo 'TOGOMCP_SPARQL_HISTORY=/var/log/togomcp/sparql-history.jsonl' >> .env
+mkdir -p logs
+docker compose up -d togomcp-main
+tail -f logs/sparql-history.jsonl
 ```
 
 The path in the env var is the **container-side** path; the bind mount makes
@@ -152,7 +174,8 @@ parent directory exists:
 ```json
 "env": {
     "NCBI_API_KEY": "your-key-here",
-    "TOGOMCP_QUERY_LOG": "/Users/you/togomcp-logs/togomcp.jsonl"
+    "TOGOMCP_QUERY_LOG": "/Users/you/togomcp-logs/togomcp.jsonl",
+    "TOGOMCP_SPARQL_HISTORY": "/Users/you/togomcp-logs/sparql-history.jsonl"
 }
 ```
 

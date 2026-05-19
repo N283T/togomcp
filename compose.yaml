@@ -8,6 +8,7 @@ services:
       NCBI_API_KEY: ${NCBI_API_KEY}
       TZ: ${TZ:-Asia/Tokyo}
       TOGOMCP_QUERY_LOG: ${TOGOMCP_QUERY_LOG:-}
+      TOGOMCP_SPARQL_HISTORY: ${TOGOMCP_SPARQL_HISTORY:-}
     volumes:
       - ./logs:/var/log/togomcp
     restart: unless-stopped
@@ -21,6 +22,7 @@ services:
       NCBI_API_KEY: ${NCBI_API_KEY}
       TZ: ${TZ:-Asia/Tokyo}
       TOGOMCP_QUERY_LOG: ${TOGOMCP_QUERY_LOG_TEST:-}
+      TOGOMCP_SPARQL_HISTORY: ${TOGOMCP_SPARQL_HISTORY_TEST:-}
     volumes:
       - ./logs-test:/var/log/togomcp
     restart: unless-stopped
