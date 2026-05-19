@@ -189,6 +189,46 @@ def raise_for_status_with_body(
     )
 
 
+class _SparqlHistoryLogger:
+    """Append reproducibility-focused SPARQL execution records to JSONL.
+
+    Enabled by setting TOGOMCP_SPARQL_HISTORY to a filesystem path. Logging is
+    best-effort and must never break SPARQL execution.
+    """
+
+    def __init__(self) -> None:
+        log_path = os.getenv("TOGOMCP_SPARQL_HISTORY", "").strip()
+        self._enabled = bool(log_path)
+        self._log: logging.Logger | None = None
+        if not self._enabled:
+            return
+        try:
+            Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+            handler = RotatingFileHandler(
+                log_path, maxBytes=50_000_000, backupCount=10, encoding="utf-8"
+            )
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            log = logging.getLogger("togomcp.sparql_history")
+            log.setLevel(logging.INFO)
+            log.propagate = False
+            log.handlers = [handler]
+            self._log = log
+        except Exception as exc:
+            self._enabled = False
+            logger.warning("SPARQL history logging disabled: %s", exc)
+
+    def write(self, record: dict[str, Any]) -> None:
+        if not self._enabled or self._log is None:
+            return
+        try:
+            self._log.info(json.dumps(record, default=str))
+        except Exception as exc:
+            logger.warning("Failed to write SPARQL history record: %s", exc)
+
+
+_sparql_history_logger = _SparqlHistoryLogger()
+
+
 # Making this a @mcp.tool() becomes an error, so we keep it as a function.
 async def execute_sparql(
     sparql_query: str,
@@ -211,58 +251,108 @@ async def execute_sparql(
         Priority: endpoint_url > endpoint_name > database
         For cross-database queries on shared endpoints, use endpoint_name or endpoint_url.
     """
-    url = resolve_endpoint_url(database, endpoint_name, endpoint_url)
+    start = time.perf_counter()
+    status = "error"
+    error_class: str | None = None
+    error_message: str | None = None
+    response: httpx.Response | None = None
+    url: str | None = None
 
     extra: dict[str, Any] = {
-        "endpoint_url": url,
         "query_sha256": hashlib.sha256(sparql_query.strip().encode("utf-8")).hexdigest(),
     }
     _sparql_extra_var.set(extra)
 
     try:
+        url = resolve_endpoint_url(database, endpoint_name, endpoint_url)
+        extra["endpoint_url"] = url
+
         response = await _sparql_client.post(
             url, data={"query": sparql_query}, headers={"Accept": "text/csv"}
         )
     except httpx.TimeoutException as exc:
-        extra["sparql_status"] = "timeout"
-        raise ValueError(
+        status = "timeout"
+        extra["sparql_status"] = status
+        error_class = "ValueError"
+        error_message = (
             f"SPARQL endpoint at {url} timed out after {_sparql_client.timeout.read}s. "
             "The query is likely too heavy. Add LIMIT, narrow with specific IRIs or GRAPH "
             "clauses, or split into smaller queries. Do not retry the same query without "
             f"changes. ({exc.__class__.__name__})"
-        ) from exc
+        )
+        raise ValueError(error_message) from exc
     except httpx.HTTPError as exc:
-        extra["sparql_status"] = "network_error"
-        raise ValueError(
+        status = "network_error"
+        extra["sparql_status"] = status
+        error_class = "ValueError"
+        error_message = (
             f"SPARQL endpoint at {url} could not be reached: "
             f"{exc.__class__.__name__}: {exc}"
-        ) from exc
-
-    extra["http_code"] = response.status_code
-    extra["n_bytes"] = len(response.content)
-    if response.is_success:
-        extra["sparql_status"] = "ok"
-        extra["n_rows"] = max(response.text.count("\n") - 1, 0)
-    elif 400 <= response.status_code < 500:
-        extra["sparql_status"] = "http_4xx"
+        )
+        raise ValueError(error_message) from exc
+    except BaseException as exc:
+        status = "error"
+        extra["sparql_status"] = status
+        error_class = exc.__class__.__name__
+        error_message = str(exc)
+        raise
     else:
-        extra["sparql_status"] = "http_5xx"
+        extra["http_code"] = response.status_code
+        extra["n_bytes"] = len(response.content)
+        if response.is_success:
+            status = "ok"
+            extra["sparql_status"] = status
+            extra["n_rows"] = max(response.text.count("\n") - 1, 0)
+            extra["result_sha256"] = hashlib.sha256(response.content).hexdigest()
+        elif 400 <= response.status_code < 500:
+            status = "http_4xx"
+            extra["sparql_status"] = status
+        else:
+            status = "http_5xx"
+            extra["sparql_status"] = status
 
-    raise_for_status_with_body(
-        response,
-        context="SPARQL endpoint",
-        client_error_hint=(
-            "The endpoint diagnostic above usually names the exact line/column. "
-            "Common causes: syntax error (missing brace/comma), undefined namespace "
-            "prefix, unsupported function. Fix the query — do not retry the same text."
-        ),
-        server_error_hint=(
-            "This may be transient or indicate the query is too heavy. Consider "
-            "adding LIMIT, stronger filters (specific IRIs, GRAPH clauses), or "
-            "splitting the query."
-        ),
-    )
-    return response.text
+        try:
+            raise_for_status_with_body(
+                response,
+                context="SPARQL endpoint",
+                client_error_hint=(
+                    "The endpoint diagnostic above usually names the exact line/column. "
+                    "Common causes: syntax error (missing brace/comma), undefined namespace "
+                    "prefix, unsupported function. Fix the query — do not retry the same text."
+                ),
+                server_error_hint=(
+                    "This may be transient or indicate the query is too heavy. Consider "
+                    "adding LIMIT, stronger filters (specific IRIs, GRAPH clauses), or "
+                    "splitting the query."
+                ),
+            )
+        except BaseException as exc:
+            error_class = exc.__class__.__name__
+            error_message = str(exc)
+            raise
+        return response.text
+    finally:
+        record: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "database": database,
+            "endpoint_name": endpoint_name,
+            "endpoint_url": url,
+            "sparql_query": sparql_query,
+            "query_sha256": extra["query_sha256"],
+            "status": status,
+            "elapsed_ms": round((time.perf_counter() - start) * 1000, 2),
+        }
+        for key in ("http_code", "n_rows", "n_bytes", "result_sha256"):
+            if key in extra:
+                record[key] = extra[key]
+        if error_class is not None:
+            record["error_class"] = error_class
+        if error_message is not None:
+            record["error_message"] = error_message[:500]
+        try:
+            _sparql_history_logger.write(record)
+        except Exception as exc:
+            logger.warning("Failed to write SPARQL history record: %s", exc)
 
 
 # The Primary MCP server
